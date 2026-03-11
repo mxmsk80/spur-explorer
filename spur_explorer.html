@@ -648,9 +648,10 @@ function renderCharts(r) {
   ], {
     ...darkLayout, barmode: 'relative',
     xaxis: { ...darkLayout.xaxis, title: '% Change in SPUR Reuse Traffic',
-             zeroline: true, zerolinecolor: '#475569',
-             range: [-sensMax, sensMax],
+             type: 'linear', zeroline: true, zerolinecolor: '#475569',
+             range: [-sensMax, sensMax], autorange: false,
              tickmode: 'array', tickvals: sensTickVals, ticktext: sensTickText },
+    yaxis: { ...darkLayout.yaxis, type: 'category' },
     height: 290
   }, cfg);
 }
