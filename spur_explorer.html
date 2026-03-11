@@ -496,106 +496,152 @@ function renderKPIs(r) {
   ).join('');
 }
 
+function r2(v) { return Math.round(v * 100) / 100; }
+function r1(v) { return Math.round(v * 10) / 10; }
+function r0(v) { return Math.round(v); }
+
+function plot(divId, traces, layout, config) {
+  Plotly.purge(divId);
+  Plotly.newPlot(divId, traces, layout, config);
+}
+
 function renderCharts(r) {
   const scenarios = ['macro', 'spur', 'spurReuse', 'sc', 'scReuse'];
   const scenarioNames = scenarios.map(s => names[s]);
+  const cfg = { displayModeBar: false, responsive: true };
 
-  // Main traffic chart
-  Plotly.react('chart-main', [{
+  // ── Main traffic chart ──────────────────────────────────────────────────────
+  const trafficVals = scenarios.map(s => r0(r[s].traffic));
+  const maxTraffic  = Math.max(...trafficVals);
+  plot('chart-main', [{
     x: scenarioNames,
-    y: scenarios.map(s => r[s].traffic),
+    y: trafficVals,
     type: 'bar',
     marker: { color: scenarios.map(s => colors[s]) },
-    text: scenarios.map(s => r[s].traffic.toFixed(1)),
+    text: trafficVals.map(v => v.toLocaleString()),
     textposition: 'outside', textfont: { color: '#94a3b8', size: 11 }
-  }], { ...darkLayout, yaxis: { ...darkLayout.yaxis, title: 'Mbps', tickformat: ',.0f', rangemode: 'tozero' }, height: 310 }, { displayModeBar: false });
+  }], {
+    ...darkLayout,
+    yaxis: { ...darkLayout.yaxis, title: 'Mbps',
+             range: [0, Math.ceil(maxTraffic * 1.18 / 100) * 100],
+             tickmode: 'auto', nticks: 6, tickformat: ',d' },
+    height: 310
+  }, cfg);
 
-  // Normalized
+  // ── Normalized throughput ───────────────────────────────────────────────────
   const normScenarios = ['macro', 'spurReuse', 'scReuse'];
-  const normVals = normScenarios.map(s => r.macro.traffic > 0 ? r[s].traffic / r.macro.traffic : 0);
-  Plotly.react('chart-norm', [{
+  const normVals = normScenarios.map(s => r2(r.macro.traffic > 0 ? r[s].traffic / r.macro.traffic : 0));
+  plot('chart-norm', [{
     x: normScenarios.map(s => names[s]),
     y: normVals,
     type: 'bar',
     marker: { color: normScenarios.map(s => colors[s]) },
-    text: normVals.map(v => v.toFixed(2) + 'x'),
+    text: normVals.map(v => v.toFixed(1) + 'x'),
     textposition: 'outside', textfont: { color: '#94a3b8', size: 11 }
-  }], { ...darkLayout, yaxis: { ...darkLayout.yaxis, title: 'x Macro', tickformat: '.1f', rangemode: 'tozero' }, height: 270 }, { displayModeBar: false });
+  }], {
+    ...darkLayout,
+    yaxis: { ...darkLayout.yaxis, title: 'x Macro',
+             range: [0, Math.ceil(Math.max(...normVals) * 1.2)],
+             tickmode: 'auto', nticks: 6, tickformat: '.1f' },
+    height: 270
+  }, cfg);
 
-  // Power
-  Plotly.react('chart-power', [{
+  // ── UE Power consumption ────────────────────────────────────────────────────
+  const pwrVals = scenarios.map(s => r2(r[s].power));
+  plot('chart-power', [{
     x: scenarioNames,
-    y: scenarios.map(s => r[s].power),
+    y: pwrVals,
     type: 'bar',
     marker: { color: scenarios.map(s => colors[s]) },
-    text: scenarios.map(s => r[s].power.toFixed(2)),
+    text: pwrVals.map(v => v.toFixed(2)),
     textposition: 'outside', textfont: { color: '#94a3b8', size: 11 }
-  }], { ...darkLayout, yaxis: { ...darkLayout.yaxis, title: 'Relative', tickformat: '.2f', rangemode: 'tozero' }, height: 270 }, { displayModeBar: false });
+  }], {
+    ...darkLayout,
+    yaxis: { ...darkLayout.yaxis, title: 'Relative to Macro',
+             range: [0, Math.ceil(Math.max(...pwrVals) * 1.25 * 10) / 10],
+             tickmode: 'auto', nticks: 6, tickformat: '.2f' },
+    height: 270
+  }, cfg);
 
-  // BPS/Hz
-  Plotly.react('chart-bpshz', [{
+  // ── BPS/Hz ──────────────────────────────────────────────────────────────────
+  const bpsVals = scenarios.map(s => r2(r[s].bpsHz));
+  plot('chart-bpshz', [{
     x: scenarioNames,
-    y: scenarios.map(s => r[s].bpsHz),
+    y: bpsVals,
     type: 'bar',
     marker: { color: scenarios.map(s => colors[s]) },
-    text: scenarios.map(s => r[s].bpsHz.toFixed(2)),
+    text: bpsVals.map(v => v.toFixed(2)),
     textposition: 'outside', textfont: { color: '#94a3b8', size: 11 }
-  }], { ...darkLayout, yaxis: { ...darkLayout.yaxis, title: 'BPS/Hz', tickformat: '.2f', rangemode: 'tozero' }, height: 270 }, { displayModeBar: false });
+  }], {
+    ...darkLayout,
+    yaxis: { ...darkLayout.yaxis, title: 'BPS/Hz',
+             range: [0, Math.ceil(Math.max(...bpsVals) * 1.3 * 10) / 10],
+             tickmode: 'auto', nticks: 6, tickformat: '.2f' },
+    height: 270
+  }, cfg);
 
-  // Bubble: coverage vs capacity
+  // ── Coverage vs Capacity bubble ─────────────────────────────────────────────
   const radii = [200, 300, 500, 750, 1000, 1500];
   const bubbleData = [];
   for (const sc of ['spurReuse', 'scReuse']) {
-    const traffics = [];
-    const reuses = [];
+    const traffics = [], reuses = [];
     for (const rad of radii) {
-      const pp = { ...r.params, ueRadius: rad };
-      const rr = runModel(pp);
-      traffics.push(rr[sc].traffic);
-      reuses.push(rr[sc].reuse);
+      const rr = runModel({ ...r.params, ueRadius: rad });
+      traffics.push(r0(rr[sc].traffic));
+      reuses.push(r2(rr[sc].reuse));
     }
     bubbleData.push({
       x: radii, y: traffics,
       mode: 'markers+lines', name: names[sc],
-      marker: { size: reuses.map(r => r * 5 + 8), color: colors[sc], opacity: 0.7 },
+      marker: { size: reuses.map(v => v * 5 + 8), color: colors[sc], opacity: 0.7 },
       line: { color: colors[sc], width: 2 }
     });
   }
-  Plotly.react('chart-bubble', bubbleData, {
-    ...darkLayout, xaxis: { ...darkLayout.xaxis, title: 'UE Radius (m)', tickformat: ',.0f' },
-    yaxis: { ...darkLayout.yaxis, title: 'Throughput (Mbps)', tickformat: ',.0f', rangemode: 'tozero' }, height: 270
-  }, { displayModeBar: false });
+  const allBubbleY = bubbleData.flatMap(t => t.y);
+  plot('chart-bubble', bubbleData, {
+    ...darkLayout,
+    xaxis: { ...darkLayout.xaxis, title: 'UE Radius (m)', tickmode: 'array', tickvals: radii },
+    yaxis: { ...darkLayout.yaxis, title: 'Throughput (Mbps)',
+             range: [0, Math.ceil(Math.max(...allBubbleY) * 1.15 / 100) * 100],
+             tickmode: 'auto', nticks: 6, tickformat: ',d' },
+    height: 270
+  }, cfg);
 
-  // Sensitivity analysis
+  // ── Sensitivity tornado ─────────────────────────────────────────────────────
   const sensParams = [
-    { id: 'num_ues', label: 'UEs', key: 'numUEs' },
-    { id: 'ue_radius', label: 'Radius', key: 'ueRadius' },
-    { id: 'spur_clusters', label: 'Clusters', key: 'spurClusters' },
-    { id: 'bw', label: 'Bandwidth', key: 'bw' },
-    { id: 'bel', label: 'Entry Loss', key: 'bel' },
-    { id: 'iot', label: 'IOT', key: 'iot' },
-    { id: 'macro_gain', label: 'Macro Gain', key: 'macroGain' },
+    { key: 'numUEs',      label: 'UEs' },
+    { key: 'ueRadius',    label: 'Radius' },
+    { key: 'spurClusters',label: 'Clusters' },
+    { key: 'bw',          label: 'Bandwidth' },
+    { key: 'bel',         label: 'Entry Loss' },
+    { key: 'iot',         label: 'IOT' },
+    { key: 'macroGain',   label: 'Macro Gain' },
   ];
   const baseTraffic = r.spurReuse.traffic;
   const sensLow = [], sensHigh = [], sensLabels = [];
   for (const sp of sensParams) {
-    const pLow = { ...r.params }; pLow[sp.key] = r.params[sp.key] * 0.8;
-    const pHigh = { ...r.params }; pHigh[sp.key] = r.params[sp.key] * 1.2;
-    // Clamp integers
+    const pLow  = { ...r.params, [sp.key]: r.params[sp.key] * 0.8 };
+    const pHigh = { ...r.params, [sp.key]: r.params[sp.key] * 1.2 };
     if (['numUEs','spurClusters','nodesPerCluster','txoLimit'].includes(sp.key)) {
-      pLow[sp.key] = Math.max(1, Math.round(pLow[sp.key]));
+      pLow[sp.key]  = Math.max(1, Math.round(pLow[sp.key]));
       pHigh[sp.key] = Math.round(pHigh[sp.key]);
     }
-    const rLow = runModel(pLow);
-    const rHigh = runModel(pHigh);
-    sensLow.push(Math.round(((rLow.spurReuse.traffic - baseTraffic) / baseTraffic) * 1000) / 10);
-    sensHigh.push(Math.round(((rHigh.spurReuse.traffic - baseTraffic) / baseTraffic) * 1000) / 10);
+    sensLow.push( r1(((runModel(pLow).spurReuse.traffic  - baseTraffic) / baseTraffic) * 100));
+    sensHigh.push(r1(((runModel(pHigh).spurReuse.traffic - baseTraffic) / baseTraffic) * 100));
     sensLabels.push(sp.label);
   }
-  Plotly.react('chart-sensitivity', [
-    { y: sensLabels, x: sensLow, type: 'bar', orientation: 'h', name: '-20%', marker: { color: '#ef4444' } },
+  const sensMax = Math.ceil(Math.max(...sensHigh.map(Math.abs), ...sensLow.map(Math.abs)) * 1.2);
+  plot('chart-sensitivity', [
+    { y: sensLabels, x: sensLow,  type: 'bar', orientation: 'h', name: '-20%', marker: { color: '#ef4444' } },
     { y: sensLabels, x: sensHigh, type: 'bar', orientation: 'h', name: '+20%', marker: { color: '#10b981' } }
-  ], { ...darkLayout, barmode: 'relative', xaxis: { ...darkLayout.xaxis, title: '% Change in SPUR Reuse Traffic', zeroline: true, zerolinecolor: '#475569', tickformat: '.1f', ticksuffix: '%' }, height: 290 }, { displayModeBar: false });
+  ], {
+    ...darkLayout, barmode: 'relative',
+    xaxis: { ...darkLayout.xaxis, title: '% Change in SPUR Reuse Traffic',
+             zeroline: true, zerolinecolor: '#475569',
+             range: [-sensMax, sensMax],
+             tickmode: 'auto', nticks: 8, tickformat: '.1f', ticksuffix: '%' },
+    height: 290
+  }, cfg);
 }
 
 function runSimulation() {
