@@ -500,8 +500,28 @@ function r2(v) { return Math.round(v * 100) / 100; }
 function r1(v) { return Math.round(v * 10) / 10; }
 function r0(v) { return Math.round(v); }
 
+// Generate clean tick arrays — bypasses Plotly's auto-tick formatting entirely
+function niceTicks(maxVal, nTicks, decimals) {
+  nTicks = nTicks || 5; decimals = decimals || 0;
+  if (!maxVal || maxVal <= 0 || !isFinite(maxVal)) maxVal = 1;
+  const mag = Math.pow(10, Math.floor(Math.log10(maxVal / nTicks)));
+  const step = [1, 2, 5, 10].reduce((best, s) => {
+    const c = s * mag; return Math.ceil(maxVal / c) <= nTicks + 1 ? c : best;
+  }, mag * 10);
+  const vals = [0];
+  for (let v = step; v <= maxVal * 1.05 + step * 0.01; v += step) {
+    vals.push(parseFloat(v.toFixed(8)));
+    if (vals.length > nTicks + 2) break;
+  }
+  const fmt = decimals > 0
+    ? v => v.toFixed(decimals)
+    : v => v >= 10000 ? Math.round(v).toLocaleString() : String(Math.round(v));
+  return { tickmode: 'array', tickvals: vals, ticktext: vals.map(fmt) };
+}
+
+// Always force a re-render even when data is identical (datarevision acts as a change signal)
 function plot(divId, traces, layout, config) {
-  Plotly.newPlot(divId, traces, layout, config);
+  Plotly.react(divId, traces, { ...layout, datarevision: Date.now() }, config);
 }
 
 function renderCharts(r) {
@@ -513,69 +533,56 @@ function renderCharts(r) {
   const trafficVals = scenarios.map(s => r0(r[s].traffic));
   const maxTraffic  = Math.max(...trafficVals);
   plot('chart-main', [{
-    x: scenarioNames,
-    y: trafficVals,
-    type: 'bar',
+    x: scenarioNames, y: trafficVals, type: 'bar',
     marker: { color: scenarios.map(s => colors[s]) },
     text: trafficVals.map(v => v.toLocaleString()),
     textposition: 'outside', textfont: { color: '#94a3b8', size: 11 }
   }], {
     ...darkLayout,
-    yaxis: { ...darkLayout.yaxis, title: 'Mbps',
-             range: [0, Math.ceil(maxTraffic * 1.18 / 100) * 100],
-             tickmode: 'auto', nticks: 6, tickformat: ',d' },
+    yaxis: { ...darkLayout.yaxis, title: 'Mbps', ...niceTicks(maxTraffic * 1.15) },
     height: 310
   }, cfg);
 
   // ── Normalized throughput ───────────────────────────────────────────────────
   const normScenarios = ['macro', 'spurReuse', 'scReuse'];
   const normVals = normScenarios.map(s => r2(r.macro.traffic > 0 ? r[s].traffic / r.macro.traffic : 0));
+  const maxNorm = Math.max(...normVals);
   plot('chart-norm', [{
-    x: normScenarios.map(s => names[s]),
-    y: normVals,
-    type: 'bar',
+    x: normScenarios.map(s => names[s]), y: normVals, type: 'bar',
     marker: { color: normScenarios.map(s => colors[s]) },
     text: normVals.map(v => v.toFixed(1) + 'x'),
     textposition: 'outside', textfont: { color: '#94a3b8', size: 11 }
   }], {
     ...darkLayout,
-    yaxis: { ...darkLayout.yaxis, title: 'x Macro',
-             range: [0, Math.ceil(Math.max(...normVals) * 1.2)],
-             tickmode: 'auto', nticks: 6, tickformat: '.1f' },
+    yaxis: { ...darkLayout.yaxis, title: 'x Macro', ...niceTicks(maxNorm * 1.2, 5, 1) },
     height: 270
   }, cfg);
 
   // ── UE Power consumption ────────────────────────────────────────────────────
   const pwrVals = scenarios.map(s => r2(r[s].power));
+  const maxPwr = Math.max(...pwrVals);
   plot('chart-power', [{
-    x: scenarioNames,
-    y: pwrVals,
-    type: 'bar',
+    x: scenarioNames, y: pwrVals, type: 'bar',
     marker: { color: scenarios.map(s => colors[s]) },
     text: pwrVals.map(v => v.toFixed(2)),
     textposition: 'outside', textfont: { color: '#94a3b8', size: 11 }
   }], {
     ...darkLayout,
-    yaxis: { ...darkLayout.yaxis, title: 'Relative to Macro',
-             range: [0, Math.ceil(Math.max(...pwrVals) * 1.25 * 10) / 10],
-             tickmode: 'auto', nticks: 6, tickformat: '.2f' },
+    yaxis: { ...darkLayout.yaxis, title: 'Relative to Macro', ...niceTicks(maxPwr * 1.25, 5, 2) },
     height: 270
   }, cfg);
 
   // ── BPS/Hz ──────────────────────────────────────────────────────────────────
   const bpsVals = scenarios.map(s => r2(r[s].bpsHz));
+  const maxBps = Math.max(...bpsVals);
   plot('chart-bpshz', [{
-    x: scenarioNames,
-    y: bpsVals,
-    type: 'bar',
+    x: scenarioNames, y: bpsVals, type: 'bar',
     marker: { color: scenarios.map(s => colors[s]) },
     text: bpsVals.map(v => v.toFixed(2)),
     textposition: 'outside', textfont: { color: '#94a3b8', size: 11 }
   }], {
     ...darkLayout,
-    yaxis: { ...darkLayout.yaxis, title: 'BPS/Hz',
-             range: [0, Math.ceil(Math.max(...bpsVals) * 1.3 * 10) / 10],
-             tickmode: 'auto', nticks: 6, tickformat: '.2f' },
+    yaxis: { ...darkLayout.yaxis, title: 'BPS/Hz', ...niceTicks(maxBps * 1.3, 5, 2) },
     height: 270
   }, cfg);
 
@@ -590,19 +597,16 @@ function renderCharts(r) {
       reuses.push(r2(rr[sc].reuse));
     }
     bubbleData.push({
-      x: radii, y: traffics,
-      mode: 'markers+lines', name: names[sc],
+      x: radii, y: traffics, mode: 'markers+lines', name: names[sc],
       marker: { size: reuses.map(v => v * 5 + 8), color: colors[sc], opacity: 0.7 },
       line: { color: colors[sc], width: 2 }
     });
   }
-  const allBubbleY = bubbleData.flatMap(t => t.y);
+  const maxBubbleY = Math.max(...bubbleData.flatMap(t => t.y));
   plot('chart-bubble', bubbleData, {
     ...darkLayout,
-    xaxis: { ...darkLayout.xaxis, title: 'UE Radius (m)', tickmode: 'array', tickvals: radii },
-    yaxis: { ...darkLayout.yaxis, title: 'Throughput (Mbps)',
-             range: [0, Math.ceil(Math.max(...allBubbleY) * 1.15 / 100) * 100],
-             tickmode: 'auto', nticks: 6, tickformat: ',d' },
+    xaxis: { ...darkLayout.xaxis, title: 'UE Radius (m)', tickmode: 'array', tickvals: radii, ticktext: radii.map(String) },
+    yaxis: { ...darkLayout.yaxis, title: 'Throughput (Mbps)', ...niceTicks(maxBubbleY * 1.15) },
     height: 270
   }, cfg);
 
@@ -629,7 +633,11 @@ function renderCharts(r) {
     sensHigh.push(r1(((runModel(pHigh).spurReuse.traffic - baseTraffic) / baseTraffic) * 100));
     sensLabels.push(sp.label);
   }
-  const sensMax = Math.ceil(Math.max(...sensHigh.map(Math.abs), ...sensLow.map(Math.abs)) * 1.2);
+  const sensAbsMax = Math.max(...sensHigh.map(Math.abs), ...sensLow.map(Math.abs));
+  const sensMax = Math.ceil(sensAbsMax * 1.2);
+  const sensTicks = niceTicks(sensMax, 5, 0);
+  const sensTickVals = [...sensTicks.tickvals.map(v => -v).reverse(), ...sensTicks.tickvals.slice(1)];
+  const sensTickText = sensTickVals.map(v => (v >= 0 ? '+' : '') + v + '%');
   plot('chart-sensitivity', [
     { y: sensLabels, x: sensLow,  type: 'bar', orientation: 'h', name: '-20%', marker: { color: '#ef4444' } },
     { y: sensLabels, x: sensHigh, type: 'bar', orientation: 'h', name: '+20%', marker: { color: '#10b981' } }
@@ -638,7 +646,7 @@ function renderCharts(r) {
     xaxis: { ...darkLayout.xaxis, title: '% Change in SPUR Reuse Traffic',
              zeroline: true, zerolinecolor: '#475569',
              range: [-sensMax, sensMax],
-             tickmode: 'auto', nticks: 8, tickformat: '.1f', ticksuffix: '%' },
+             tickmode: 'array', tickvals: sensTickVals, ticktext: sensTickText },
     height: 290
   }, cfg);
 }
