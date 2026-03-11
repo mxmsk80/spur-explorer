@@ -470,7 +470,7 @@ const darkLayout = {
   font: { family: '-apple-system, sans-serif', size: 11, color: '#94a3b8' },
   margin: { t: 10, b: 50, l: 70, r: 20 },
   xaxis: { gridcolor: '#1e293b', linecolor: '#334155', tickfont: { color: '#94a3b8' }, automargin: true },
-  yaxis: { gridcolor: '#1e293b', linecolor: '#334155', tickfont: { color: '#94a3b8' }, automargin: true },
+  yaxis: { gridcolor: '#1e293b', linecolor: '#334155', tickfont: { color: '#94a3b8' }, automargin: true, type: 'linear' },
   legend: { orientation: 'h', y: -0.2, font: { color: '#94a3b8' } },
   barmode: 'group',
 };
@@ -517,9 +517,9 @@ function niceTicks(maxVal, nTicks, decimals) {
     ? v => v.toFixed(decimals)
     : v => v >= 10000 ? Math.round(v).toLocaleString() : String(Math.round(v));
   const topTick = vals[vals.length - 1];
-  // Explicitly set range so Plotly doesn't auto-scale incorrectly when
-  // tickmode:'array' and rangemode:'tozero' conflict with each other
-  return { tickmode: 'array', tickvals: vals, ticktext: vals.map(fmt),
+  // type:'linear' prevents Plotly from auto-detecting axis as 'category' when
+  // tickmode:'array' is used — without it bars render with zero height
+  return { type: 'linear', tickmode: 'array', tickvals: vals, ticktext: vals.map(fmt),
            range: [0, topTick], autorange: false };
 }
 
@@ -609,7 +609,7 @@ function renderCharts(r) {
   const maxBubbleY = Math.max(...bubbleData.flatMap(t => t.y));
   plot('chart-bubble', bubbleData, {
     ...darkLayout,
-    xaxis: { ...darkLayout.xaxis, title: 'UE Radius (m)', tickmode: 'array', tickvals: radii, ticktext: radii.map(String) },
+    xaxis: { ...darkLayout.xaxis, title: 'UE Radius (m)', type: 'linear', tickmode: 'array', tickvals: radii, ticktext: radii.map(String) },
     yaxis: { ...darkLayout.yaxis, title: 'Throughput (Mbps)', ...niceTicks(maxBubbleY * 1.15) },
     height: 270
   }, cfg);
