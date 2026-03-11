@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SPUR Model Parameter Explorer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.27.0/plotly.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+
+  .top-bar { background: #1e293b; border-bottom: 1px solid #334155; padding: 16px 24px; display: flex; align-items: center; gap: 16px; }
+  .top-bar h1 { font-size: 20px; font-weight: 700; color: #f1f5f9; }
+  .top-bar .badge { background: #10b981; color: #fff; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 12px; }
+
+  .layout { display: flex; height: calc(100vh - 57px); }
+
+  /* Sidebar */
+  .sidebar { width: 380px; min-width: 380px; background: #1e293b; border-right: 1px solid #334155; overflow-y: auto; padding: 20px; }
+  .sidebar h2 { font-size: 13px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin: 20px 0 12px; }
+  .sidebar h2:first-child { margin-top: 0; }
+
+  .control { margin-bottom: 14px; }
+  .control label { display: block; font-size: 12px; color: #cbd5e1; margin-bottom: 4px; font-weight: 500; }
+  .control .row { display: flex; align-items: center; gap: 10px; }
+  .control input[type=range] { flex: 1; accent-color: #10b981; height: 6px; }
+  .control .val { font-size: 13px; color: #10b981; font-weight: 600; min-width: 55px; text-align: right; font-variant-numeric: tabular-nums; }
+  .control select { width: 100%; background: #0f172a; color: #e2e8f0; border: 1px solid #334155; border-radius: 6px; padding: 8px 10px; font-size: 13px; }
+  .control .hint { font-size: 11px; color: #64748b; margin-top: 2px; }
+
+  .divider { border: none; border-top: 1px solid #334155; margin: 16px 0; }
+
+  .btn-run { width: 100%; padding: 12px; background: #10b981; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 8px; transition: background 0.2s; }
+  .btn-run:hover { background: #059669; }
+  .btn-run:active { transform: scale(0.98); }
+  .btn-reset { width: 100%; padding: 10px; background: transparent; color: #64748b; border: 1px solid #334155; border-radius: 8px; font-size: 13px; cursor: pointer; margin-top: 8px; }
+  .btn-reset:hover { color: #e2e8f0; border-color: #64748b; }
+
+  /* Main area */
+  .main { flex: 1; overflow-y: auto; padding: 24px; }
+
+  .kpi-strip { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 24px; }
+  .kpi { background: #1e293b; border-radius: 10px; padding: 14px 16px; border: 1px solid #334155; }
+  .kpi .label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+  .kpi .value { font-size: 22px; font-weight: 700; margin-top: 2px; }
+  .kpi .delta { font-size: 11px; margin-top: 2px; }
+  .kpi .delta.up { color: #10b981; }
+  .kpi .delta.down { color: #ef4444; }
+  .kpi.macro .value { color: #818cf8; }
+  .kpi.spur .value { color: #10b981; }
+  .kpi.sc .value { color: #f59e0b; }
+
+  .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .chart-card { background: #1e293b; border-radius: 10px; padding: 16px; border: 1px solid #334155; }
+  .chart-card.full { grid-column: 1 / -1; }
+  .chart-card h3 { font-size: 14px; font-weight: 600; color: #e2e8f0; margin-bottom: 4px; }
+  .chart-card .sub { font-size: 11px; color: #64748b; margin-bottom: 12px; }
+
+  .log { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px; margin-top: 16px; max-height: 120px; overflow-y: auto; font-family: 'SF Mono', monospace; font-size: 11px; color: #64748b; line-height: 1.6; }
+  .log .entry { }
+  .log .entry.changed { color: #fbbf24; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h1>SPUR Model Parameter Explorer</h1>
+  <span class="badge">INTERACTIVE</span>
+</div>
+
+<div class="layout">
+  <div class="sidebar">
+    <h2>Network Layout</h2>
+
+    <div class="control">
+      <label>Number of UEs</label>
+      <div class="row">
+        <input type="range" id="num_ues" min="10" max="200" value="50" step="5">
+        <span class="val" id="num_ues_val">50</span>
+      </div>
+    </div>
+
+    <div class="control">
+      <label>UE Radius (meters)</label>
+      <div class="row">
+        <input type="range" id="ue_radius" min="100" max="2000" value="500" step="50">
+        <span class="val" id="ue_radius_val">500 m</span>
+      </div>
+    </div>
+
+    <div class="control">
+      <label>SPUR Clusters</label>
+      <div class="row">
+        <input type="range" id="spur_clusters" min="1" max="8" value="3" step="1">
+        <span class="val" id="spur_clusters_val">3</span>
+      </div>
+    </div>
+
+    <div class="control">
+      <label>Nodes per Cluster</label>
+      <div class="row">
+        <input type="range" id="nodes_per_cluster" min="1" max="8" value="4" step="1">
+        <span class="val" id="nodes_per_cluster_val">4</span>
+      </div>
+    </div>
+
+    <div class="control">
+      <label>Cluster Radius (meters)</label>
+      <div class="row">
+        <input type="range" id="cluster_radius" min="10" max="200" value="50" step="10">
+        <span class="val" id="cluster_radius_val">50 m</span>
+      </div>
+    </div>
+
+    <div class="control">
+      <label>Small Cell Antenna Type</label>
+      <select id="sc_type">
+        <option value="type_a">Type A (23 dBi boresight)</option>
+        <option value="type_b">Type B (14 dBi boresight)</option>
+      </select>
+    </div>
+
+    <hr class="divider">
+    <h2>RF Parameters</h2>
+
+    <div class="control">
+      <label>Center Frequency (GHz)</label>
+      <div class="row">
+        <input type="range" id="freq" min="0.7" max="6.0" value="3.77" step="0.01">
+        <span class="val" id="freq_val">3.77 GHz</span>
+      </div>
+    </div>
+
+    <div class="control">
+      <label>Channel Bandwidth (MHz)</label>
+      <div class="row">
+        <input type="range" id="bw" min="10" max="200" value="95" step="5">
+        <span class="val" id="bw_val">95 MHz</span>
+      </div>
+    </div>
+
+    <div class="control">
+      <label>Building Entry Loss (dB)</label>
+      <div class="row">
+        <input type="range" id="bel" min="0" max="40" value="20" step="1">
+        <span class="val" id="bel_val">20 dB</span>
+      </div>
+    </div>
+
+    <div class="control">
+      <label>Interference Over Threshold (dB)</label>
+      <div class="row">
+        <input type="range" id="iot" min="0" max="20" value="8" step="0.5">
+        <span class="val" id="iot_val">8 dB</span>
+      </div>
+    </div>
+
+    <div class="control">
+      <label>Macro Antenna Gain (dBi)</label>
+      <div class="row">
+        <input type="range" id="macro_gain" min="10" max="35" value="26" step="0.5">
+        <span class="val" id="macro_gain_val">26 dBi</span>
+      </div>
+    </div>
+
+    <div class="control">
+      <label>MIMO Capacity Benefit</label>
+      <div class="row">
+        <input type="range" id="mimo" min="0" max="1" value="0.35" step="0.05">
+        <span class="val" id="mimo_val">35%</span>
+      </div>
+    </div>
+
+    <hr class="divider">
+    <h2>UE Population Mix</h2>
+
+    <div class="control">
+      <label>Outdoor Handheld %</label>
+      <div class="row">
+        <input type="range" id="outdoor_hh" min="0" max="100" value="70" step="5">
+        <span class="val" id="outdoor_hh_val">70%</span>
+      </div>
+      <div class="hint">Indoor Handheld auto-adjusts. FWA split fixed at remaining.</div>
+    </div>
+
+    <div class="control">
+      <label>Indoor Handheld %</label>
+      <div class="row">
+        <input type="range" id="indoor_hh" min="0" max="100" value="20" step="5">
+        <span class="val" id="indoor_hh_val">20%</span>
+      </div>
+    </div>
+
+    <hr class="divider">
+    <h2>Scheduler</h2>
+
+    <div class="control">
+      <label>Reuse TXO Limit</label>
+      <div class="row">
+        <input type="range" id="txo_limit" min="1" max="16" value="8" step="1">
+        <span class="val" id="txo_limit_val">8</span>
+      </div>
+      <div class="hint">Max transmit opportunities per UE per cycle</div>
+    </div>
+
+    <div class="control">
+      <label>UE Pairing SIR Threshold (dB)</label>
+      <div class="row">
+        <input type="range" id="pairing_sir" min="5" max="40" value="20" step="1">
+        <span class="val" id="pairing_sir_val">20 dB</span>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <button class="btn-run" onclick="runSimulation()">Recalculate Model</button>
+    <button class="btn-reset" onclick="resetDefaults()">Reset to Defaults</button>
+
+    <div class="log" id="log"></div>
+  </div>
+
+  <div class="main">
+    <div class="kpi-strip" id="kpi-strip"></div>
+
+    <div class="chart-grid">
+      <div class="chart-card full">
+        <h3>Uplink Traffic Comparison</h3>
+        <div class="sub">Mbps by scenario — Macro vs SPUR Reuse vs Small Cell Reuse</div>
+        <div id="chart-main" style="height:320px;"></div>
+      </div>
+
+      <div class="chart-card">
+        <h3>Normalized Throughput (vs Macro)</h3>
+        <div class="sub">Multiplier over baseline macro-only capacity</div>
+        <div id="chart-norm" style="height:280px;"></div>
+      </div>
+
+      <div class="chart-card">
+        <h3>UE Power Consumption</h3>
+        <div class="sub">Relative to macro=1 (lower = better battery life)</div>
+        <div id="chart-power" style="height:280px;"></div>
+      </div>
+
+      <div class="chart-card">
+        <h3>Spectral Efficiency (BPS/Hz)</h3>
+        <div class="sub">Average bits per second per Hz across all UEs</div>
+        <div id="chart-bpshz" style="height:280px;"></div>
+      </div>
+
+      <div class="chart-card">
+        <h3>Coverage vs Capacity Tradeoff</h3>
+        <div class="sub">UE radius (coverage) vs throughput — bubble = reuse factor</div>
+        <div id="chart-bubble" style="height:280px;"></div>
+      </div>
+
+      <div class="chart-card full">
+        <h3>Sensitivity Analysis</h3>
+        <div class="sub">SPUR Reuse throughput sensitivity to each parameter (±20% from current)</div>
+        <div id="chart-sensitivity" style="height:300px;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Simplified RF Model ──────────────────────────────────────────────────────
+// This is an analytical approximation of the full SPUR simulation model.
+// It captures the key physics: pathloss (3GPP UMi/UMa), SINR, MCS→BPS mapping,
+// frequency reuse gains, and power control — without the full Monte Carlo machinery.
+
+const THERMAL_NOISE = -174; // dBm/Hz
+
+function dB(x) { return 10 * Math.log10(Math.max(x, 1e-20)); }
+function fromDB(x) { return Math.pow(10, x / 10); }
+
+// 3GPP pathloss model (simplified UMa/UMi)
+function pathloss3gpp(distM, freqGHz, isSmall, isIndoor, bel) {
+  const d = Math.max(distM, 10);
+  const hBS = isSmall ? 10 : 25;
+  const hUE = 1.5;
+  const fc = freqGHz * 1000; // MHz
+  // Simplified 3GPP model
+  let pl;
+  if (isSmall) {
+    pl = 32.4 + 21 * Math.log10(d) + 20 * Math.log10(freqGHz); // UMi-like
+  } else {
+    pl = 28.0 + 22 * Math.log10(d) + 20 * Math.log10(freqGHz); // UMa-like
+  }
+  if (isIndoor) pl += bel;
+  // Shadow fading approximation (average effect)
+  pl += 4;
+  return pl;
+}
+
+// MCS table: SINR → BPS/Hz (simplified from 3GPP 38.214)
+function sinrToBpsHz(sinrDB) {
+  if (sinrDB < -5) return 0;
+  if (sinrDB < 0) return 0.23;
+  if (sinrDB < 3) return 0.38;
+  if (sinrDB < 6) return 0.6;
+  if (sinrDB < 9) return 0.88;
+  if (sinrDB < 12) return 1.18;
+  if (sinrDB < 15) return 1.48;
+  if (sinrDB < 18) return 1.91;
+  if (sinrDB < 21) return 2.41;
+  if (sinrDB < 24) return 2.73;
+  if (sinrDB < 27) return 3.32;
+  return 3.9;
+}
+
+function getParams() {
+  return {
+    numUEs: +document.getElementById('num_ues').value,
+    ueRadius: +document.getElementById('ue_radius').value,
+    spurClusters: +document.getElementById('spur_clusters').value,
+    nodesPerCluster: +document.getElementById('nodes_per_cluster').value,
+    clusterRadius: +document.getElementById('cluster_radius').value,
+    scType: document.getElementById('sc_type').value,
+    freq: +document.getElementById('freq').value,
+    bw: +document.getElementById('bw').value,
+    bel: +document.getElementById('bel').value,
+    iot: +document.getElementById('iot').value,
+    macroGain: +document.getElementById('macro_gain').value,
+    mimo: +document.getElementById('mimo').value,
+    outdoorPct: +document.getElementById('outdoor_hh').value / 100,
+    indoorPct: +document.getElementById('indoor_hh').value / 100,
+    txoLimit: +document.getElementById('txo_limit').value,
+    pairingSIR: +document.getElementById('pairing_sir').value,
+  };
+}
+
+function runModel(p) {
+  const rbBW = 360; // kHz
+  const uplinkSlots = 400;
+  const scGain = p.scType === 'type_a' ? 23 : 14;
+  const spurGain = 5; // femto omni
+  const numSCsites = 2; // fixed small cells
+  const numSCants = numSCsites * 3; // 3 sectors each
+  const totalSpurAnts = p.spurClusters * p.nodesPerCluster;
+
+  // Noise
+  const rxNoise = 5;
+  const effNoiseFloor = THERMAL_NOISE + rxNoise;
+  const intPowerDensity = effNoiseFloor + p.iot;
+  const totalNoiseDensity = dB(fromDB(effNoiseFloor) + fromDB(intPowerDensity));
+  const totalNoise = totalNoiseDensity + dB(rbBW * 1000);
+
+  // Generate UE positions and compute per-UE metrics
+  const results = { macro: [], spur: [], spurReuse: [], sc: [], scReuse: [] };
+  let seed = 42;
+  function rand() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+
+  const ues = [];
+  for (let i = 0; i < p.numUEs; i++) {
+    const r = Math.sqrt(rand()) * p.ueRadius;
+    const theta = rand() * (p.outdoorPct > 0 ? 120 : 360) * Math.PI / 180;
+    const isIndoor = rand() > p.outdoorPct / (p.outdoorPct + p.indoorPct + 0.001);
+    const isFWA = rand() > 0.9;
+    const maxTX = isFWA ? 26 : 23;
+    ues.push({ r, theta, isIndoor, isFWA, maxTX });
+  }
+
+  // Average SPUR distance from UEs
+  const avgSpurDist = p.ueRadius * 0.65;
+  // Average SC distance
+  const avgSCdist = p.ueRadius * 0.7;
+
+  let macroBpsTotal = 0, spurBpsTotal = 0, scBpsTotal = 0;
+  let macroPowerTotal = 0, spurPowerTotal = 0, scPowerTotal = 0;
+  let connectedMacro = 0, connectedSpur = 0, connectedSC = 0;
+
+  for (const ue of ues) {
+    const dist = Math.max(ue.r, 20);
+
+    // Macro
+    const plMacro = pathloss3gpp(dist, p.freq, false, ue.isIndoor, p.bel);
+    const gainMacro = p.macroGain; // looking towards
+    const totalGainMacro = gainMacro - plMacro;
+    const targetSINR = 15; // target MCS
+    const targetRxPower = targetSINR + totalNoise;
+    let txPowerMacro = targetRxPower - totalGainMacro;
+    txPowerMacro = Math.min(Math.max(txPowerMacro, -40), ue.maxTX);
+    const rxPowerMacro = txPowerMacro + totalGainMacro;
+    const sinrMacro = rxPowerMacro - totalNoise;
+    const bpsMacro = sinrToBpsHz(sinrMacro);
+
+    if (sinrMacro > -5) {
+      macroBpsTotal += bpsMacro;
+      macroPowerTotal += fromDB(txPowerMacro);
+      connectedMacro++;
+    }
+
+    // SPUR (closest SPUR node)
+    const spurDist = Math.max(dist * 0.3 + p.clusterRadius * 0.5, 15);
+    const plSpur = pathloss3gpp(spurDist, p.freq, true, ue.isIndoor, p.bel);
+    const totalGainSpur = spurGain - plSpur;
+    let txPowerSpur = targetRxPower - totalGainSpur;
+    txPowerSpur = Math.min(Math.max(txPowerSpur, -40), ue.maxTX);
+    const rxPowerSpur = txPowerSpur + totalGainSpur;
+    // SPUR assignment: closer node = SPUR, else macro
+    const useSpur = (totalGainSpur > totalGainMacro - 3);
+    const sinrSpur = useSpur ? (rxPowerSpur - totalNoise) : sinrMacro;
+    const bpsSpur = sinrToBpsHz(sinrSpur);
+    const pwrSpur = useSpur ? fromDB(txPowerSpur) : fromDB(txPowerMacro);
+
+    if (sinrSpur > -5) {
+      spurBpsTotal += bpsSpur;
+      spurPowerTotal += pwrSpur;
+      connectedSpur++;
+    }
+
+    // Small Cell
+    const scDist = Math.max(dist * 0.5, 30);
+    const plSC = pathloss3gpp(scDist, p.freq, true, ue.isIndoor, p.bel);
+    const totalGainSC = scGain - plSC;
+    const useSC = (totalGainSC > totalGainMacro - 3);
+    let txPowerSC = targetRxPower - (useSC ? totalGainSC : totalGainMacro);
+    txPowerSC = Math.min(Math.max(txPowerSC, -40), ue.maxTX);
+    const rxPowerSC = txPowerSC + (useSC ? totalGainSC : totalGainMacro);
+    const sinrSC = rxPowerSC - totalNoise;
+    const bpsSC = sinrToBpsHz(sinrSC);
+
+    if (sinrSC > -5) {
+      scBpsTotal += bpsSC;
+      scPowerTotal += fromDB(txPowerSC);
+      connectedSC++;
+    }
+  }
+
+  const mimoMul = 1 + p.mimo;
+
+  // Average BPS/Hz
+  const avgBpsMacro = connectedMacro > 0 ? macroBpsTotal / connectedMacro : 0;
+  const avgBpsSpur = connectedSpur > 0 ? spurBpsTotal / connectedSpur : 0;
+  const avgBpsSC = connectedSC > 0 ? scBpsTotal / connectedSC : 0;
+
+  // Uplink traffic = avg_bps_hz × bandwidth × UL_slots_fraction × MIMO
+  const trafficMacro = avgBpsMacro * p.bw * mimoMul;
+  const trafficSpur = avgBpsSpur * p.bw * mimoMul;
+  const trafficSC = avgBpsSC * p.bw * mimoMul;
+
+  // Reuse: multiply by effective reuse factor
+  const spurReuseFactor = Math.min(totalSpurAnts * 0.85, p.txoLimit);
+  const scReuseFactor = Math.min(numSCants * 0.75, p.txoLimit);
+  // Reuse has some efficiency loss from cochannel interference
+  const reuseEfficiency = 0.92;
+  const trafficSpurReuse = trafficSpur * spurReuseFactor * reuseEfficiency;
+  const trafficSCReuse = trafficSC * scReuseFactor * reuseEfficiency;
+
+  // Power consumption relative to macro
+  const avgPwrMacro = connectedMacro > 0 ? macroPowerTotal / connectedMacro : 1;
+  const avgPwrSpur = connectedSpur > 0 ? spurPowerTotal / connectedSpur : 1;
+  const avgPwrSC = connectedSC > 0 ? scPowerTotal / connectedSC : 1;
+  const relPwrSpur = avgPwrMacro > 0 ? avgPwrSpur / avgPwrMacro : 1;
+  const relPwrSC = avgPwrMacro > 0 ? avgPwrSC / avgPwrMacro : 1;
+
+  return {
+    macro: { traffic: trafficMacro, bpsHz: avgBpsMacro, power: 1, reuse: 1, connected: connectedMacro },
+    spur: { traffic: trafficSpur, bpsHz: avgBpsSpur, power: relPwrSpur, reuse: 1, connected: connectedSpur },
+    spurReuse: { traffic: trafficSpurReuse, bpsHz: avgBpsSpur * 1.05, power: relPwrSpur * 1.08, reuse: spurReuseFactor, connected: connectedSpur },
+    sc: { traffic: trafficSC, bpsHz: avgBpsSC, power: relPwrSC, reuse: 1, connected: connectedSC },
+    scReuse: { traffic: trafficSCReuse, bpsHz: avgBpsSC * 1.02, power: relPwrSC * 1.05, reuse: scReuseFactor, connected: connectedSC },
+    params: p
+  };
+}
+
+// ─── UI Updates ───────────────────────────────────────────────────────────────
+
+const darkLayout = {
+  paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+  font: { family: '-apple-system, sans-serif', size: 11, color: '#94a3b8' },
+  margin: { t: 10, b: 50, l: 55, r: 15 },
+  xaxis: { gridcolor: '#1e293b', linecolor: '#334155', tickfont: { color: '#94a3b8' } },
+  yaxis: { gridcolor: '#1e293b', linecolor: '#334155', tickfont: { color: '#94a3b8' } },
+  legend: { orientation: 'h', y: -0.2, font: { color: '#94a3b8' } },
+  barmode: 'group',
+};
+
+const colors = { macro: '#818cf8', spur: '#22d3ee', spurReuse: '#10b981', sc: '#fbbf24', scReuse: '#f97316' };
+const names = { macro: 'Macro', spur: 'SPUR', spurReuse: 'SPUR Reuse', sc: 'Small Cell', scReuse: 'SC Reuse' };
+
+let lastResult = null;
+
+function renderKPIs(r) {
+  const norm = r.macro.traffic > 0 ? r.spurReuse.traffic / r.macro.traffic : 0;
+  const scNorm = r.macro.traffic > 0 ? r.scReuse.traffic / r.macro.traffic : 0;
+  const kpis = [
+    { label: 'Macro Traffic', value: r.macro.traffic.toFixed(1), unit: 'Mbps', cls: 'macro' },
+    { label: 'SPUR Reuse', value: r.spurReuse.traffic.toFixed(1), unit: 'Mbps', cls: 'spur' },
+    { label: 'SC Reuse', value: r.scReuse.traffic.toFixed(1), unit: 'Mbps', cls: 'sc' },
+    { label: 'SPUR Multiplier', value: norm.toFixed(1) + 'x', unit: 'vs macro', cls: 'spur' },
+    { label: 'SPUR Power', value: (r.spurReuse.power * 100).toFixed(0) + '%', unit: 'of macro', cls: 'spur' },
+    { label: 'Reuse Factor', value: r.spurReuse.reuse.toFixed(1), unit: 'SPUR', cls: 'spur' },
+  ];
+  document.getElementById('kpi-strip').innerHTML = kpis.map(k =>
+    `<div class="kpi ${k.cls}"><div class="label">${k.label}</div><div class="value">${k.value}</div><div class="delta">${k.unit}</div></div>`
+  ).join('');
+}
+
+function renderCharts(r) {
+  const scenarios = ['macro', 'spur', 'spurReuse', 'sc', 'scReuse'];
+  const scenarioNames = scenarios.map(s => names[s]);
+
+  // Main traffic chart
+  Plotly.react('chart-main', [{
+    x: scenarioNames,
+    y: scenarios.map(s => r[s].traffic),
+    type: 'bar',
+    marker: { color: scenarios.map(s => colors[s]), cornerradius: 4 },
+    text: scenarios.map(s => r[s].traffic.toFixed(1)),
+    textposition: 'outside', textfont: { color: '#94a3b8', size: 11 }
+  }], { ...darkLayout, yaxis: { ...darkLayout.yaxis, title: 'Mbps' }, height: 310 }, { displayModeBar: false });
+
+  // Normalized
+  const normScenarios = ['macro', 'spurReuse', 'scReuse'];
+  const normVals = normScenarios.map(s => r.macro.traffic > 0 ? r[s].traffic / r.macro.traffic : 0);
+  Plotly.react('chart-norm', [{
+    x: normScenarios.map(s => names[s]),
+    y: normVals,
+    type: 'bar',
+    marker: { color: normScenarios.map(s => colors[s]) },
+    text: normVals.map(v => v.toFixed(2) + 'x'),
+    textposition: 'outside', textfont: { color: '#94a3b8', size: 11 }
+  }], { ...darkLayout, yaxis: { ...darkLayout.yaxis, title: 'x Macro' }, height: 270 }, { displayModeBar: false });
+
+  // Power
+  Plotly.react('chart-power', [{
+    x: scenarioNames,
+    y: scenarios.map(s => r[s].power),
+    type: 'bar',
+    marker: { color: scenarios.map(s => colors[s]) },
+    text: scenarios.map(s => r[s].power.toFixed(2)),
+    textposition: 'outside', textfont: { color: '#94a3b8', size: 11 }
+  }], { ...darkLayout, yaxis: { ...darkLayout.yaxis, title: 'Relative' }, height: 270 }, { displayModeBar: false });
+
+  // BPS/Hz
+  Plotly.react('chart-bpshz', [{
+    x: scenarioNames,
+    y: scenarios.map(s => r[s].bpsHz),
+    type: 'bar',
+    marker: { color: scenarios.map(s => colors[s]) },
+    text: scenarios.map(s => r[s].bpsHz.toFixed(2)),
+    textposition: 'outside', textfont: { color: '#94a3b8', size: 11 }
+  }], { ...darkLayout, yaxis: { ...darkLayout.yaxis, title: 'BPS/Hz' }, height: 270 }, { displayModeBar: false });
+
+  // Bubble: coverage vs capacity
+  const radii = [200, 300, 500, 750, 1000, 1500];
+  const bubbleData = [];
+  for (const sc of ['spurReuse', 'scReuse']) {
+    const traffics = [];
+    const reuses = [];
+    for (const rad of radii) {
+      const pp = { ...r.params, ueRadius: rad };
+      const rr = runModel(pp);
+      traffics.push(rr[sc].traffic);
+      reuses.push(rr[sc].reuse);
+    }
+    bubbleData.push({
+      x: radii, y: traffics,
+      mode: 'markers+lines', name: names[sc],
+      marker: { size: reuses.map(r => r * 5 + 8), color: colors[sc], opacity: 0.7 },
+      line: { color: colors[sc], width: 2 }
+    });
+  }
+  Plotly.react('chart-bubble', bubbleData, {
+    ...darkLayout, xaxis: { ...darkLayout.xaxis, title: 'UE Radius (m)' },
+    yaxis: { ...darkLayout.yaxis, title: 'Throughput (Mbps)' }, height: 270
+  }, { displayModeBar: false });
+
+  // Sensitivity analysis
+  const sensParams = [
+    { id: 'num_ues', label: 'UEs', key: 'numUEs' },
+    { id: 'ue_radius', label: 'Radius', key: 'ueRadius' },
+    { id: 'spur_clusters', label: 'Clusters', key: 'spurClusters' },
+    { id: 'bw', label: 'Bandwidth', key: 'bw' },
+    { id: 'bel', label: 'Entry Loss', key: 'bel' },
+    { id: 'iot', label: 'IOT', key: 'iot' },
+    { id: 'macro_gain', label: 'Macro Gain', key: 'macroGain' },
+  ];
+  const baseTraffic = r.spurReuse.traffic;
+  const sensLow = [], sensHigh = [], sensLabels = [];
+  for (const sp of sensParams) {
+    const pLow = { ...r.params }; pLow[sp.key] = r.params[sp.key] * 0.8;
+    const pHigh = { ...r.params }; pHigh[sp.key] = r.params[sp.key] * 1.2;
+    // Clamp integers
+    if (['numUEs','spurClusters','nodesPerCluster','txoLimit'].includes(sp.key)) {
+      pLow[sp.key] = Math.max(1, Math.round(pLow[sp.key]));
+      pHigh[sp.key] = Math.round(pHigh[sp.key]);
+    }
+    const rLow = runModel(pLow);
+    const rHigh = runModel(pHigh);
+    sensLow.push(((rLow.spurReuse.traffic - baseTraffic) / baseTraffic) * 100);
+    sensHigh.push(((rHigh.spurReuse.traffic - baseTraffic) / baseTraffic) * 100);
+    sensLabels.push(sp.label);
+  }
+  Plotly.react('chart-sensitivity', [
+    { y: sensLabels, x: sensLow, type: 'bar', orientation: 'h', name: '-20%', marker: { color: '#ef4444' } },
+    { y: sensLabels, x: sensHigh, type: 'bar', orientation: 'h', name: '+20%', marker: { color: '#10b981' } }
+  ], { ...darkLayout, barmode: 'relative', xaxis: { ...darkLayout.xaxis, title: '% Change in SPUR Reuse Traffic', zeroline: true, zerolinecolor: '#475569' }, height: 290 }, { displayModeBar: false });
+}
+
+function runSimulation() {
+  const p = getParams();
+  const r = runModel(p);
+  lastResult = r;
+  renderKPIs(r);
+  renderCharts(r);
+
+  const log = document.getElementById('log');
+  const ts = new Date().toLocaleTimeString();
+  log.innerHTML = `<div class="entry changed">[${ts}] Run complete: Macro=${r.macro.traffic.toFixed(1)} | SPUR Reuse=${r.spurReuse.traffic.toFixed(1)} | SC Reuse=${r.scReuse.traffic.toFixed(1)} Mbps</div>` + log.innerHTML;
+}
+
+function resetDefaults() {
+  const defaults = { num_ues: 50, ue_radius: 500, spur_clusters: 3, nodes_per_cluster: 4, cluster_radius: 50, freq: 3.77, bw: 95, bel: 20, iot: 8, macro_gain: 26, mimo: 0.35, outdoor_hh: 70, indoor_hh: 20, txo_limit: 8, pairing_sir: 20 };
+  for (const [id, val] of Object.entries(defaults)) {
+    document.getElementById(id).value = val;
+  }
+  document.getElementById('sc_type').value = 'type_a';
+  updateAllLabels();
+  runSimulation();
+}
+
+// ─── Slider Label Updates ─────────────────────────────────────────────────────
+
+function updateAllLabels() {
+  const u = (id, suffix = '') => document.getElementById(id + '_val').textContent = document.getElementById(id).value + suffix;
+  u('num_ues'); u('ue_radius', ' m'); u('spur_clusters'); u('nodes_per_cluster');
+  u('cluster_radius', ' m'); u('bw', ' MHz'); u('bel', ' dB'); u('iot', ' dB');
+  u('macro_gain', ' dBi'); u('txo_limit'); u('pairing_sir', ' dB');
+  document.getElementById('freq_val').textContent = (+document.getElementById('freq').value).toFixed(2) + ' GHz';
+  document.getElementById('mimo_val').textContent = Math.round(document.getElementById('mimo').value * 100) + '%';
+  document.getElementById('outdoor_hh_val').textContent = document.getElementById('outdoor_hh').value + '%';
+  document.getElementById('indoor_hh_val').textContent = document.getElementById('indoor_hh').value + '%';
+}
+
+// Bind all sliders
+document.querySelectorAll('input[type=range]').forEach(el => {
+  el.addEventListener('input', () => { updateAllLabels(); runSimulation(); });
+});
+document.getElementById('sc_type').addEventListener('change', runSimulation);
+
+// Initial run
+updateAllLabels();
+runSimulation();
+</script>
+</body>
+</html>
