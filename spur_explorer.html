@@ -470,7 +470,7 @@ const darkLayout = {
   font: { family: '-apple-system, sans-serif', size: 11, color: '#94a3b8' },
   margin: { t: 10, b: 50, l: 70, r: 20 },
   xaxis: { gridcolor: '#1e293b', linecolor: '#334155', tickfont: { color: '#94a3b8' }, automargin: true },
-  yaxis: { gridcolor: '#1e293b', linecolor: '#334155', tickfont: { color: '#94a3b8' }, rangemode: 'tozero', automargin: true, tickformat: ',.1f' },
+  yaxis: { gridcolor: '#1e293b', linecolor: '#334155', tickfont: { color: '#94a3b8' }, automargin: true },
   legend: { orientation: 'h', y: -0.2, font: { color: '#94a3b8' } },
   barmode: 'group',
 };
@@ -516,7 +516,11 @@ function niceTicks(maxVal, nTicks, decimals) {
   const fmt = decimals > 0
     ? v => v.toFixed(decimals)
     : v => v >= 10000 ? Math.round(v).toLocaleString() : String(Math.round(v));
-  return { tickmode: 'array', tickvals: vals, ticktext: vals.map(fmt) };
+  const topTick = vals[vals.length - 1];
+  // Explicitly set range so Plotly doesn't auto-scale incorrectly when
+  // tickmode:'array' and rangemode:'tozero' conflict with each other
+  return { tickmode: 'array', tickvals: vals, ticktext: vals.map(fmt),
+           range: [0, topTick], autorange: false };
 }
 
 // Always force a re-render even when data is identical (datarevision acts as a change signal)
