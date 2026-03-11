@@ -291,20 +291,14 @@ function pathloss3gpp(distM, freqGHz, isSmall, isIndoor, bel) {
   return pl;
 }
 
-// MCS table: SINR → BPS/Hz (simplified from 3GPP 38.214)
+// Continuous Shannon-based BPS/Hz with 3GPP efficiency factor
+// Replaces coarse MCS step-table so all parameters show smooth sensitivity
 function sinrToBpsHz(sinrDB) {
   if (sinrDB < -5) return 0;
-  if (sinrDB < 0) return 0.23;
-  if (sinrDB < 3) return 0.38;
-  if (sinrDB < 6) return 0.6;
-  if (sinrDB < 9) return 0.88;
-  if (sinrDB < 12) return 1.18;
-  if (sinrDB < 15) return 1.48;
-  if (sinrDB < 18) return 1.91;
-  if (sinrDB < 21) return 2.41;
-  if (sinrDB < 24) return 2.73;
-  if (sinrDB < 27) return 3.32;
-  return 3.9;
+  const sinrLin = Math.pow(10, sinrDB / 10);
+  // Shannon capacity × implementation efficiency (accounts for coding, CP, pilots)
+  const raw = Math.log2(1 + sinrLin) * 0.72;
+  return Math.min(raw, 3.9); // cap at ~256QAM
 }
 
 function getParams() {
@@ -368,18 +362,37 @@ function runModel(p) {
   let macroPowerTotal = 0, spurPowerTotal = 0, scPowerTotal = 0;
   let connectedMacro = 0, connectedSpur = 0, connectedSC = 0;
 
+  // 3GPP fractional power control: P_tx = P0 + alpha * PL
+  // alpha < 1 means UEs only partially compensate for pathloss,
+  // creating a natural SINR gradient: near UEs get higher SINR, far UEs lower
+  const alpha = 0.7;
+  const targetSINR = 15;
+
+  // P0 is a FIXED network parameter calibrated at reference deployment conditions
+  // (500m cell radius, 50m cluster radius, 4 nodes/cluster). When actual distances
+  // change (via sliders), P0 stays fixed so UEs at larger distances see lower SINR.
+  const refCellRadius = 500; // reference macro cell radius
+  const refClusterRadius = 50; // reference cluster radius
+  const refNodesPerCluster = 4;
+  const refMacroDist = Math.max(refCellRadius * 0.65, 20);
+  const refPL_macro = pathloss3gpp(refMacroDist, p.freq, false, false, 0);
+  const P0_macro = totalNoise + targetSINR + (1 - alpha) * refPL_macro - p.macroGain;
+  const refCSpread = refClusterRadius / Math.sqrt(refNodesPerCluster);
+  const refSpurDist = Math.max(refMacroDist * 0.3 + refCSpread * 1.2, 15);
+  const refPL_spur = pathloss3gpp(refSpurDist, p.freq, true, false, 0);
+  const P0_spur = totalNoise + targetSINR + (1 - alpha) * refPL_spur - spurGain;
+  const refSCdist = Math.max(refMacroDist * 0.5, 30);
+  const refPL_sc = pathloss3gpp(refSCdist, p.freq, true, false, 0);
+  const P0_sc = totalNoise + targetSINR + (1 - alpha) * refPL_sc - scGain;
+
   for (const ue of ues) {
     const dist = Math.max(ue.r, 20);
 
-    // Macro
+    // ── Macro ──
     const plMacro = pathloss3gpp(dist, p.freq, false, ue.isIndoor, p.bel);
-    const gainMacro = p.macroGain; // looking towards
-    const totalGainMacro = gainMacro - plMacro;
-    const targetSINR = 15; // target MCS
-    const targetRxPower = targetSINR + totalNoise;
-    let txPowerMacro = targetRxPower - totalGainMacro;
+    let txPowerMacro = P0_macro + alpha * plMacro;
     txPowerMacro = Math.min(Math.max(txPowerMacro, -40), ue.maxTX);
-    const rxPowerMacro = txPowerMacro + totalGainMacro;
+    const rxPowerMacro = txPowerMacro + p.macroGain - plMacro;
     const sinrMacro = rxPowerMacro - totalNoise;
     const bpsMacro = sinrToBpsHz(sinrMacro);
 
@@ -389,18 +402,19 @@ function runModel(p) {
       connectedMacro++;
     }
 
-    // SPUR (closest SPUR node)
-    const spurDist = Math.max(dist * 0.3 + p.clusterRadius * 0.5, 15);
+    // ── SPUR (closest SPUR node) ──
+    // Nearest node distance depends on UE position, cluster spread, node density
+    const clusterSpread = p.clusterRadius / Math.sqrt(Math.max(p.nodesPerCluster, 1));
+    const spurDist = Math.max(dist * 0.3 + clusterSpread * 1.2, 15);
     const plSpur = pathloss3gpp(spurDist, p.freq, true, ue.isIndoor, p.bel);
-    const totalGainSpur = spurGain - plSpur;
-    let txPowerSpur = targetRxPower - totalGainSpur;
+    let txPowerSpur = P0_spur + alpha * plSpur;
     txPowerSpur = Math.min(Math.max(txPowerSpur, -40), ue.maxTX);
-    const rxPowerSpur = txPowerSpur + totalGainSpur;
-    // SPUR assignment: closer node = SPUR, else macro
-    const useSpur = (totalGainSpur > totalGainMacro - 3);
-    const sinrSpur = useSpur ? (rxPowerSpur - totalNoise) : sinrMacro;
+    const rxPowerSpur = txPowerSpur + spurGain - plSpur;
+    // SPUR scenario: UEs always connect to SPUR nodes (dedicated topology)
+    // No macro fallback — this represents a SPUR-only deployment
+    const sinrSpur = rxPowerSpur - totalNoise;
     const bpsSpur = sinrToBpsHz(sinrSpur);
-    const pwrSpur = useSpur ? fromDB(txPowerSpur) : fromDB(txPowerMacro);
+    const pwrSpur = fromDB(txPowerSpur);
 
     if (sinrSpur > -5) {
       spurBpsTotal += bpsSpur;
@@ -408,14 +422,13 @@ function runModel(p) {
       connectedSpur++;
     }
 
-    // Small Cell
+    // ── Small Cell ──
     const scDist = Math.max(dist * 0.5, 30);
     const plSC = pathloss3gpp(scDist, p.freq, true, ue.isIndoor, p.bel);
-    const totalGainSC = scGain - plSC;
-    const useSC = (totalGainSC > totalGainMacro - 3);
-    let txPowerSC = targetRxPower - (useSC ? totalGainSC : totalGainMacro);
+    let txPowerSC = P0_sc + alpha * plSC;
     txPowerSC = Math.min(Math.max(txPowerSC, -40), ue.maxTX);
-    const rxPowerSC = txPowerSC + (useSC ? totalGainSC : totalGainMacro);
+    const rxPowerSC = txPowerSC + scGain - plSC;
+    // SC scenario: UEs always connect to small cells (dedicated topology)
     const sinrSC = rxPowerSC - totalNoise;
     const bpsSC = sinrToBpsHz(sinrSC);
 
@@ -428,15 +441,19 @@ function runModel(p) {
 
   const mimoMul = 1 + p.mimo;
 
+  // Multi-user scheduling diversity: more UEs → better chance of scheduling
+  // a UE with favorable channel conditions → higher system throughput
+  const muDiversityGain = 1 + 0.12 * Math.log2(Math.max(p.numUEs, 1) / 50);
+
   // Average BPS/Hz
   const avgBpsMacro = connectedMacro > 0 ? macroBpsTotal / connectedMacro : 0;
   const avgBpsSpur = connectedSpur > 0 ? spurBpsTotal / connectedSpur : 0;
   const avgBpsSC = connectedSC > 0 ? scBpsTotal / connectedSC : 0;
 
-  // Uplink traffic = avg_bps_hz × bandwidth × UL_slots_fraction × MIMO
-  const trafficMacro = avgBpsMacro * p.bw * mimoMul;
-  const trafficSpur = avgBpsSpur * p.bw * mimoMul;
-  const trafficSC = avgBpsSC * p.bw * mimoMul;
+  // Uplink traffic = avg_bps_hz × bandwidth × MIMO × scheduling_gain
+  const trafficMacro = avgBpsMacro * p.bw * mimoMul * muDiversityGain;
+  const trafficSpur = avgBpsSpur * p.bw * mimoMul * muDiversityGain;
+  const trafficSC = avgBpsSC * p.bw * mimoMul * muDiversityGain;
 
   // Reuse: multiply by effective reuse factor
   const spurReuseFactor = Math.min(totalSpurAnts * 0.85, p.txoLimit);
