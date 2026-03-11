@@ -501,7 +501,6 @@ function r1(v) { return Math.round(v * 10) / 10; }
 function r0(v) { return Math.round(v); }
 
 function plot(divId, traces, layout, config) {
-  Plotly.purge(divId);
   Plotly.newPlot(divId, traces, layout, config);
 }
 
@@ -644,16 +643,19 @@ function renderCharts(r) {
   }, cfg);
 }
 
+let _simTimer = null;
 function runSimulation() {
-  const p = getParams();
-  const r = runModel(p);
-  lastResult = r;
-  renderKPIs(r);
-  renderCharts(r);
-
-  const log = document.getElementById('log');
-  const ts = new Date().toLocaleTimeString();
-  log.innerHTML = `<div class="entry changed">[${ts}] Run complete: Macro=${r.macro.traffic.toFixed(1)} | SPUR Reuse=${r.spurReuse.traffic.toFixed(1)} | SC Reuse=${r.scReuse.traffic.toFixed(1)} Mbps</div>` + log.innerHTML;
+  clearTimeout(_simTimer);
+  _simTimer = setTimeout(() => {
+    const p = getParams();
+    const r = runModel(p);
+    lastResult = r;
+    renderKPIs(r);
+    renderCharts(r);
+    const log = document.getElementById('log');
+    const ts = new Date().toLocaleTimeString();
+    log.innerHTML = `<div class="entry changed">[${ts}] Run complete: Macro=${r.macro.traffic.toFixed(1)} | SPUR Reuse=${r.spurReuse.traffic.toFixed(1)} | SC Reuse=${r.scReuse.traffic.toFixed(1)} Mbps</div>` + log.innerHTML;
+  }, 120);
 }
 
 function resetDefaults() {
@@ -679,9 +681,10 @@ function updateAllLabels() {
   document.getElementById('indoor_hh_val').textContent = document.getElementById('indoor_hh').value + '%';
 }
 
-// Bind all sliders
+// Bind all sliders — update labels live, debounced chart redraw
 document.querySelectorAll('input[type=range]').forEach(el => {
-  el.addEventListener('input', () => { updateAllLabels(); runSimulation(); });
+  el.addEventListener('input',  () => { updateAllLabels(); runSimulation(); });
+  el.addEventListener('change', () => { updateAllLabels(); runSimulation(); }); // fires on mouseup/touchend
 });
 document.getElementById('sc_type').addEventListener('change', runSimulation);
 
