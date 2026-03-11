@@ -255,7 +255,7 @@
       <div class="chart-card full">
         <h3>Sensitivity Analysis</h3>
         <div class="sub">SPUR Reuse throughput sensitivity to each parameter (±20% from current)</div>
-        <div id="chart-sensitivity" style="height:300px;"></div>
+        <div id="chart-sensitivity" style="height:400px;"></div>
       </div>
     </div>
   </div>
@@ -368,22 +368,30 @@ function runModel(p) {
   const alpha = 0.7;
   const targetSINR = 15;
 
-  // P0 is a FIXED network parameter calibrated at reference deployment conditions
-  // (500m cell radius, 50m cluster radius, 4 nodes/cluster). When actual distances
-  // change (via sliders), P0 stays fixed so UEs at larger distances see lower SINR.
-  const refCellRadius = 500; // reference macro cell radius
-  const refClusterRadius = 50; // reference cluster radius
+  // P0 is a FIXED network parameter calibrated at reference deployment conditions.
+  // ALL reference values are constants — freq, IoT, distances, gains — so that
+  // changing any slider parameter actually changes the SINR (nothing cancels).
+  const refFreq = 3.5;        // reference frequency (GHz)
+  const refIoT = 6;           // reference interference-over-thermal (dB)
+  const refMacroGain = 26;    // reference macro antenna gain (dBi)
+  const refCellRadius = 500;  // reference macro cell radius (m)
+  const refClusterRadius = 50; // reference cluster radius (m)
   const refNodesPerCluster = 4;
+  // Reference noise floor (fixed, not dependent on IoT slider)
+  const refIntPD = effNoiseFloor + refIoT;
+  const refTotalNoiseDensity = dB(fromDB(effNoiseFloor) + fromDB(refIntPD));
+  const refTotalNoise = refTotalNoiseDensity + dB(rbBW * 1000);
+  // Reference distances and pathloss
   const refMacroDist = Math.max(refCellRadius * 0.65, 20);
-  const refPL_macro = pathloss3gpp(refMacroDist, p.freq, false, false, 0);
-  const P0_macro = totalNoise + targetSINR + (1 - alpha) * refPL_macro - p.macroGain;
+  const refPL_macro = pathloss3gpp(refMacroDist, refFreq, false, false, 0);
+  const P0_macro = refTotalNoise + targetSINR + (1 - alpha) * refPL_macro - refMacroGain;
   const refCSpread = refClusterRadius / Math.sqrt(refNodesPerCluster);
   const refSpurDist = Math.max(refMacroDist * 0.3 + refCSpread * 1.2, 15);
-  const refPL_spur = pathloss3gpp(refSpurDist, p.freq, true, false, 0);
-  const P0_spur = totalNoise + targetSINR + (1 - alpha) * refPL_spur - spurGain;
+  const refPL_spur = pathloss3gpp(refSpurDist, refFreq, true, false, 0);
+  const P0_spur = refTotalNoise + targetSINR + (1 - alpha) * refPL_spur - spurGain;
   const refSCdist = Math.max(refMacroDist * 0.5, 30);
-  const refPL_sc = pathloss3gpp(refSCdist, p.freq, true, false, 0);
-  const P0_sc = totalNoise + targetSINR + (1 - alpha) * refPL_sc - scGain;
+  const refPL_sc = pathloss3gpp(refSCdist, refFreq, true, false, 0);
+  const P0_sc = refTotalNoise + targetSINR + (1 - alpha) * refPL_sc - scGain;
 
   for (const ue of ues) {
     const dist = Math.max(ue.r, 20);
@@ -633,13 +641,17 @@ function renderCharts(r) {
 
   // ── Sensitivity tornado ─────────────────────────────────────────────────────
   const sensParams = [
-    { key: 'numUEs',      label: 'UEs' },
-    { key: 'ueRadius',    label: 'Radius' },
-    { key: 'spurClusters',label: 'Clusters' },
-    { key: 'bw',          label: 'Bandwidth' },
-    { key: 'bel',         label: 'Entry Loss' },
-    { key: 'iot',         label: 'IOT' },
-    { key: 'macroGain',   label: 'Macro Gain' },
+    { key: 'numUEs',          label: 'UEs' },
+    { key: 'ueRadius',        label: 'UE Radius' },
+    { key: 'spurClusters',    label: 'SPUR Clusters' },
+    { key: 'nodesPerCluster', label: 'Nodes/Cluster' },
+    { key: 'clusterRadius',   label: 'Cluster Radius' },
+    { key: 'bw',              label: 'Bandwidth' },
+    { key: 'freq',            label: 'Frequency' },
+    { key: 'bel',             label: 'Entry Loss' },
+    { key: 'iot',             label: 'IOT' },
+    { key: 'mimo',            label: 'MIMO' },
+    { key: 'txoLimit',        label: 'TXO Limit' },
   ];
   const baseTraffic = r.spurReuse.traffic;
   const sensLow = [], sensHigh = [], sensLabels = [];
@@ -669,7 +681,7 @@ function renderCharts(r) {
              range: [-sensMax, sensMax], autorange: false,
              tickmode: 'array', tickvals: sensTickVals, ticktext: sensTickText },
     yaxis: { ...darkLayout.yaxis, type: 'category' },
-    height: 290
+    height: 390
   }, cfg);
 }
 
